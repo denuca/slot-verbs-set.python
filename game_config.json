@@ -1,0 +1,5 @@
+{
+  "default_slot_count": 3,
+  "max_slot_count": 5,
+  "max_attempts": 3
+}
