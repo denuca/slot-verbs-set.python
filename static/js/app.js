@@ -7,38 +7,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const notification = document.getElementById("notification");
 
     let currentCombinationId = null;
-    let sessionId = null;
     let maxAttempts = 3;
-    let attemptsUsed = 0;
     let slotCount = 3;
-
     let attemptHistory = [];
     let symbols = [];
 
-    // Load shared data if present in URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const sharedData = urlParams.get("data");
-    if (sharedData) {
-        try {
-            const decoded = decodeURIComponent(escape(atob(sharedData)));
-            const parsed = JSON.parse(decoded);
-            slotCount = parsed.slotCount;
-            symbols = parsed.symbols;
-            attemptHistory = parsed.attempts;
-            maxAttempts = attemptHistory.length;
-
-            renderSymbols(symbols, false);
-            attemptHistory.forEach((attempt, index) => renderAttemptRow(attempt, index + 1, false));
-
-            attemptsLeftEl.textContent = "Shared game view";
-        } catch (e) { console.error("Failed to load shared data:", e); }
-    }
-
-    // Spin button handler
     spinBtn.addEventListener("click", async () => {
         slotCount = parseInt(slotCountInput.value, 10);
         attemptsSection.innerHTML = "";
-        attemptsUsed = 0;
         attemptHistory = [];
         symbols = [];
         hideNotification();
@@ -47,18 +23,21 @@ document.addEventListener("DOMContentLoaded", () => {
             const res = await fetch("/api/spin", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ slots: slotCount, session_id: sessionId })
+                body: JSON.stringify({ slots: slotCount })
             });
+
             const data = await res.json();
 
             if (res.ok) {
                 currentCombinationId = data.combination_id;
-                sessionId = data.session_id;
                 maxAttempts = data.max_attempts;
                 symbols = data.symbols;
 
                 renderSymbols(symbols, true);
-                attemptsLeftEl.textContent = `Attempts left: ${maxAttempts - attemptsUsed}`;
+
+                attemptsLeftEl.textContent =
+                    `Found 0/${data.total_combos} | Attempts 0/${maxAttempts}`;
+
                 addAttemptInputRow();
             } else {
                 showNotification(data.error || "Error spinning");
@@ -69,7 +48,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Render spun symbols
     function renderSymbols(symbolsArray, animate) {
         slotSymbolsDiv.innerHTML = "";
         symbolsArray.forEach(s => {
@@ -81,38 +59,34 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Add current attempt input row
     function addAttemptInputRow() {
+        const inputs = [];
         const inputRow = document.createElement("div");
         inputRow.className = "attempt-row";
-
-        const attemptNumber = document.createElement("span");
-        attemptNumber.className = "attempt-number";
-        attemptNumber.textContent = `#${attemptsUsed + 1}`;
-        inputRow.appendChild(attemptNumber);
 
         for (let i = 0; i < slotCount; i++) {
             const input = document.createElement("input");
             input.type = "text";
             input.className = "form-control guess-input";
-            input.setAttribute("aria-label", `Guess word for slot ${i + 1}`);
-            input.maxLength = 25;
-
-            // Pre-fill previously guessed correct words
-            if (attemptHistory.length > 0) {
-                const prev = attemptHistory[0][i];
-                if (prev.correct) input.value = prev.guess;
-            }
-
+            input.maxLength = 8;
             inputRow.appendChild(input);
+            inputs.push(input);
         }
 
         const submitBtn = document.createElement("button");
         submitBtn.className = "btn btn-success ms-2";
-        submitBtn.textContent = "Submit";
-        inputRow.appendChild(submitBtn);
+        submitBtn.textContent = "Send";
+        submitBtn.disabled = true;
 
+        attemptsSection.prepend(submitBtn);
         attemptsSection.prepend(inputRow);
+
+        function updateButtonState() {
+            const allFilled = inputs.every(i => i.value.trim().length > 0);
+            submitBtn.disabled = !allFilled;
+        }
+
+        inputs.forEach(i => i.addEventListener("input", updateButtonState));
 
         submitBtn.addEventListener("click", async () => {
             const inputs = Array.from(inputRow.querySelectorAll("input.guess-input"));
@@ -122,125 +96,65 @@ document.addEventListener("DOMContentLoaded", () => {
                 const res = await fetch("/api/guess", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ combination_id: currentCombinationId, guesses })
+                    body: JSON.stringify({
+                        combination_id: currentCombinationId,
+                        guesses
+                    })
                 });
+
                 const result = await res.json();
 
                 if (res.ok) {
-                    const attemptRecord = [];
-                    let allCorrect = true;
 
-                    result.results.forEach((r, idx) => {
-                        const input = inputs[idx];
-                        input.value = r.user_guess;
-                        input.disabled = true;
-                        if (r.correct) input.classList.add("correct");
-                        else { input.classList.add("incorrect"); allCorrect = false; }
-                        attemptRecord.push({ symbol: r.symbol, guess: r.user_guess, correct: r.correct });
+                    // lock inputs
+                    inputs.forEach(i => i.disabled = true);
+                    submitBtn.remove();
+
+                    // mark matched combo visually
+                    if (result.matched) {
+                        inputs.forEach(i => i.classList.add("correct"));
+                    } else {
+                        inputs.forEach(i => i.classList.add("incorrect"));
+                    }
+
+                    attemptHistory.unshift({
+                        guesses,
+                        matched: result.matched
                     });
 
-                    // ✅ Record attempt before removing submit button
-                    attemptHistory.unshift(attemptRecord);
+                    attemptsLeftEl.textContent =
+                        `Found ${result.found_count}/${result.total_combos} | Attempts ${result.attempts_used}/${result.max_attempts}`;
 
-                    submitBtn.remove();
-                    attemptsUsed++;
-                    attemptsLeftEl.textContent = `Attempts left: ${maxAttempts - attemptsUsed}`;
-
-                    if (attemptsUsed < maxAttempts && !allCorrect) {
+                    if (!result.game_over) {
                         addAttemptInputRow();
                     } else {
-                        let msg = allCorrect ? "🎉 Congratulations! All words guessed!" : "❌ Game over! Max attempts reached.";
+                        const msg = result.win
+                            ? "🎉 You found ALL combinations!"
+                            : "❌ Max attempts reached!";
                         showNotification(msg, true);
                     }
+
                 } else {
-                    showNotification(result.error || "Error checking guesses");
+                    showNotification(result.error || "Error checking guess");
                 }
+
             } catch (err) {
                 console.error(err);
-                showNotification("Error connecting to server.");
+                showNotification("Server error.");
             }
-        });
+        }, {once: true});
     }
 
-    // Render previous attempt rows
-    function renderAttemptRow(attempt, attemptNum, top = true) {
-        const rowDiv = document.createElement("div");
-        rowDiv.className = "attempt-row";
-
-        const attemptNumber = document.createElement("span");
-        attemptNumber.className = "attempt-number";
-        attemptNumber.textContent = `#${attemptNum}`;
-        rowDiv.appendChild(attemptNumber);
-
-        attempt.forEach(a => {
-            const input = document.createElement("input");
-            input.type = "text";
-            input.className = "form-control guess-input";
-            input.value = a.guess;
-            input.disabled = true;
-            input.maxLength = 25;
-            if (a.correct) input.classList.add("correct");
-            else input.classList.add("incorrect");
-            rowDiv.appendChild(input);
-        });
-
-        if (top) attemptsSection.prepend(rowDiv);
-        else attemptsSection.appendChild(rowDiv);
-    }
-
-    // Show notification with optional share link
     function showNotification(message, endGame = false) {
-        notification.innerHTML = "";
-
-        const msgSpan = document.createElement("span");
-        msgSpan.textContent = message;
-        notification.appendChild(msgSpan);
+        notification.innerHTML = message;
+        notification.classList.remove("d-none");
 
         if (endGame) {
-            const shareDiv = document.createElement("div");
-            shareDiv.className = "mt-2 d-flex flex-wrap align-items-center";
-
-            const dataObj = { slotCount, symbols, attempts: attemptHistory };
-            const jsonStr = JSON.stringify(dataObj);
-            const encoded = btoa(unescape(encodeURIComponent(jsonStr)));
-            const url = `${window.location.origin}${window.location.pathname}?data=${encoded}`;
-
-            // Shareable hyperlink
-            const shareLink = document.createElement("a");
-            shareLink.href = url;
-            shareLink.textContent = "View & share your game";
-            shareLink.target = "_blank";
-            shareLink.rel = "noopener noreferrer";
-            shareLink.className = "me-2";
-            shareLink.setAttribute("aria-label", "Shareable link to view your attempts");
-            shareDiv.appendChild(shareLink);
-
-            // Copy button
-            const copyBtn = document.createElement("button");
-            copyBtn.className = "btn btn-outline-secondary btn-sm";
-            copyBtn.textContent = "Copy";
-            copyBtn.setAttribute("aria-label", "Copy shareable link to clipboard");
-            copyBtn.addEventListener("click", async () => {
-                try {
-                    await navigator.clipboard.writeText(url);
-                    copyBtn.textContent = "Copied!";
-                    setTimeout(() => (copyBtn.textContent = "Copy"), 2000);
-                } catch (err) { console.error("Failed to copy link:", err); }
-            });
-
-            shareDiv.appendChild(copyBtn);
-            notification.appendChild(shareDiv);
+            const closeBtn = document.createElement("button");
+            closeBtn.className = "btn-close ms-2";
+            closeBtn.addEventListener("click", hideNotification);
+            notification.appendChild(closeBtn);
         }
-
-        // Close button
-        const closeBtn = document.createElement("button");
-        closeBtn.type = "button";
-        closeBtn.className = "btn-close ms-2";
-        closeBtn.setAttribute("aria-label", "Close notification");
-        closeBtn.addEventListener("click", hideNotification);
-        notification.appendChild(closeBtn);
-
-        notification.classList.remove("d-none");
     }
 
     function hideNotification() {

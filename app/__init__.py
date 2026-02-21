@@ -19,7 +19,9 @@ def create_app():
     app.config["DEFAULT_SLOT_COUNT"] = int(os.getenv("DEFAULT_SLOT_COUNT", 3))
     app.config["MAX_SLOT_COUNT"] = int(os.getenv("MAX_SLOT_COUNT", 5))
     app.config["REDIS_URL"] = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-    app.config["FLASK_ENV"] = os.getenv("FLASK_ENV", "production")
+    app.config["FLASK_ENV"] = os.getenv("FLASK_ENV", "development")
+    app.config["MAX_ATTEMPTS"] = os.getenv("MAX_ATTEMPTS", "999")
+    app.secret_key = os.getenv("SECRET_KEY", "dev_key")
 
     # Initialize Redis attached to app instance
     init_redis(app)

@@ -1,70 +1,83 @@
-import random
-import secrets
-from app.redis_repo import SlotRepository
-from app.extensions import get_redis_client  # ✅ import here
+import uuid
+from flask import current_app
+from flask import session
+from app.redis_repository import SlotRepository
+from app.utils import StringNormalizer
 
 class SlotService:
 
     @staticmethod
-    def spin(slot_count: int, max_slot_count: int, app=None):
-        """
-        Generate a random symbol combination.
-        Returns a dict with combination_id, symbols, session_id, max_attempts
-        """
-        if slot_count < 1 or slot_count > max_slot_count:
-            raise ValueError(f"slot_count must be between 1 and {max_slot_count}")
+    def spin(app):
+        slot_key, combos = SlotRepository.get_random_slot(app)
 
-        # ✅ use get_redis_client(app) directly
-        redis_client = get_redis_client(app)
-        all_combos = redis_client.hkeys(SlotRepository.KEY)
-        if not all_combos:
+        if not slot_key:
             return None
 
-        # Filter combinations by requested slot count
-        valid_combos = [c for c in all_combos if len(c.split(",")) == slot_count]
-        if not valid_combos:
-            return None
+        symbol_string = slot_key.split(":")[1]
+        symbols = symbol_string.split("-")
 
-        # Pick a random combination
-        combo_str = random.choice(valid_combos)
-        symbols = combo_str.split(",")
+        # Reset session
+        session.clear()
 
         return {
-            "combination_id": combo_str,
+            "combination_id": symbol_string,
             "symbols": symbols,
-            "session_id": secrets.token_urlsafe(16),
-            "max_attempts": 5
+            "total_combos": len(combos),
+            "max_attempts": app.config["MAX_ATTEMPTS"]
         }
 
     @staticmethod
-    def check_guess(symbol_combo: list[str], user_guess: list[str], app=None):
-        """
-        Check user's guess per slot against all valid sets.
-        Each word is validated independently.
-        """
+    def check_guess(slot_key: str, guesses: list[str], app=None):
 
-        valid_sets = SlotRepository.get_valid_sets(symbol_combo, app)
-        if not valid_sets:
-            return []
+        if not slot_key.startswith("slot:"):
+            slot_key = f"slot:{slot_key}"
 
-        # Extract all valid value lists
-        valid_value_sets = [vs["values"] for vs in valid_sets]
+        combos = SlotRepository.get_combos(slot_key, app)
 
-        results = []
+        if not combos:
+            return {"error": "No combos found"}
 
-        for idx, symbol in enumerate(symbol_combo):
-            guessed_word = user_guess[idx]
+        total_combos = len(combos)
 
-            # Check if guessed word matches ANY valid set at this position
-            correct = any(
-                guessed_word == valid_values[idx]
-                for valid_values in valid_value_sets
-            )
+        # Track session state
+        if "found_combos" not in session:
+            session["found_combos"] = []
+        if "attempts_used" not in session:
+            session["attempts_used"] = 0
 
-            results.append({
-                "symbol": symbol,
-                "user_guess": guessed_word,
-                "correct": correct
-            })
+        session["attempts_used"] += 1
 
-        return results
+        # Check if guess matches a FULL combo
+        matched_combo = None
+        for combo in combos:
+            if guesses == combo[:len(guesses)]:
+                matched_combo = combo
+                break
+
+        if matched_combo:
+            combo_id = "|".join(matched_combo[:len(guesses)])
+            if combo_id not in session["found_combos"]:
+                session["found_combos"].append(combo_id)
+
+        found_count = len(session["found_combos"])
+        max_attempts = int(app.config["MAX_ATTEMPTS"])
+
+        game_over = False
+        win = False
+
+        if found_count == total_combos:
+            game_over = True
+            win = True
+        elif session["attempts_used"] >= max_attempts:
+            game_over = True
+            win = False
+
+        return {
+            "matched": bool(matched_combo),
+            "found_count": found_count,
+            "total_combos": total_combos,
+            "attempts_used": session["attempts_used"],
+            "max_attempts": max_attempts,
+            "game_over": game_over,
+            "win": win
+        }

@@ -1,17 +1,21 @@
 from flask import Blueprint, jsonify, request, current_app
 from app.services.slot_service import SlotService
+from app.utils import StringNormalizer
 
 guess_bp = Blueprint("guess_bp", __name__)
+
 
 @guess_bp.route("/api/guess", methods=["POST"])
 def guess():
     data = request.get_json(silent=True) or {}
-    combination_id = data.get("combination_id")
-    user_guess = data.get("guesses")
 
-    if not combination_id or not user_guess:
-        return jsonify({"error": "Missing combination_id or guesses"}), 400
+    slot_key = data.get("combination_id")
+    guesses = StringNormalizer.normalize_list(data.get("guesses"))
+    print(f"guesses: {guesses}")
 
-    symbols = combination_id.split(",")
-    results = SlotService.check_guess(symbols, user_guess, current_app)
-    return jsonify({"results": results})
+    if not slot_key or not guesses:
+        return jsonify({"error": "Missing data"}), 400
+
+    result = SlotService.check_guess(slot_key, guesses, current_app)
+
+    return jsonify(result)
