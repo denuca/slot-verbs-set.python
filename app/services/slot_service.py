@@ -1,8 +1,8 @@
 import uuid
-from flask import current_app
 from flask import session
 from app.redis_repository import SlotRepository
 from app.utils import StringNormalizer
+from app.services.media_service import MediaService
 
 class SlotService:
 
@@ -14,7 +14,17 @@ class SlotService:
             return None
 
         symbol_string = slot_key.split(":")[1]
-        symbols = symbol_string.split("-")
+        symbols = StringNormalizer.normalize_list(symbol_string.split("-"))
+
+        image_urls = [
+            MediaService.generate_signed_path(f"images/{s}.png")
+            for s in symbols
+        ]
+
+        audios_urls = [
+            MediaService.generate_signed_path(f"audios/{s}.mp3")
+            for s in symbols
+        ]
 
         # Reset session
         session.clear()
@@ -22,6 +32,8 @@ class SlotService:
         return {
             "combination_id": symbol_string,
             "symbols": symbols,
+            "images": image_urls,
+            "audios": audios_urls,
             "total_combos": len(combos),
             "max_attempts": app.config["MAX_ATTEMPTS"]
         }

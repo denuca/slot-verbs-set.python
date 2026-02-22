@@ -10,7 +10,6 @@ def init_redis(app):
     )
     return app.redis_client
 
-
 def get_redis_client(app=None):
     app = app or current_app._get_current_object()
     redis_client = getattr(app, "redis_client", None)
