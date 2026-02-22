@@ -81,7 +81,6 @@ document.addEventListener("DOMContentLoaded", () => {
             });
             // Prevent image from being dropped anywhere
             img.addEventListener('click', function (e) {
-                console.log("play " + audioUrls.slice(i, i+1));
                 playAudios(audioUrls.slice(i, i+1));
                 e.preventDefault();  // Prevent dropping the image
             });
@@ -131,8 +130,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     currentIndex++;  // Skip to next audio in case of error
                     playNextAudio();  // Continue playing the next audio
                 }
-            } else {
-                console.log("All audios have been played.");
             }
         }
 
