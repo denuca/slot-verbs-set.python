@@ -10,16 +10,14 @@ document.addEventListener("DOMContentLoaded", () => {
     let maxAttempts = 3;
     let slotCount = 3;
     let attemptHistory = [];
-    let symbols = [];
+    let imageUrls = [];
+    let audioUrls = [];
 
     spinBtn.addEventListener("click", async () => {
-        slotCount = parseInt(slotCountInput.value, 10);
-        attemptsSection.innerHTML = "";
-        attemptHistory = [];
-        symbols = [];
-        hideNotification();
+        resetGameUI();
 
         try {
+            slotCount = parseInt(slotCountInput.value, 10);
             const res = await fetch("/api/spin", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -28,34 +26,60 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const data = await res.json();
 
-            if (res.ok) {
-                currentCombinationId = data.combination_id;
-                maxAttempts = data.max_attempts;
-                symbols = data.symbols;
-
-                renderSymbols(symbols, true);
-
-                attemptsLeftEl.textContent =
-                    `Found 0/${data.total_combos} | Attempts 0/${maxAttempts}`;
-
-                addAttemptInputRow();
-            } else {
-                showNotification(data.error || "Error spinning");
+            if (!res.ok) {
+                showNotification(data.error || "Spin failed");
+                return;
             }
+
+            currentCombinationId = data.combination_id;
+            maxAttempts = data.max_attempts;
+            imageUrls = data.images || [];
+            audioUrls = data.audios_urls || [];
+
+            renderSymbols(imageUrls, true);
+            playAudios(audioUrls);
+
+            attemptsLeftEl.textContent =
+                `Found 0/${data.total_combos} | Attempts 0/${maxAttempts}`;
+
+            addAttemptInputRow();
+
         } catch (err) {
-            console.error(err);
-            showNotification("Error connecting to server.");
+            console.error("Spin error:", err);
+            showNotification("Server connection error.");
         }
     });
 
-    function renderSymbols(symbolsArray, animate) {
+    function resetGameUI() {
+        attemptsSection.innerHTML = "";
+        attemptHistory = [];
+        imageUrls = [];
+        audioUrls = [];
+        hideNotification();
         slotSymbolsDiv.innerHTML = "";
-        symbolsArray.forEach(s => {
-            const span = document.createElement("span");
-            span.textContent = s;
-            span.className = "slot-symbol";
-            if (animate) span.classList.add("spin");
-            slotSymbolsDiv.appendChild(span);
+        attemptsLeftEl.textContent = "";
+    }
+
+    function renderSymbols(imagesArray, animate) {
+        slotSymbolsDiv.innerHTML = "";
+
+        imagesArray.forEach(src => {
+            const img = document.createElement("img");
+            img.src = src;
+            img.className = "slot-image";
+            if (animate) img.classList.add("spin");
+            slotSymbolsDiv.appendChild(img);
+        });
+    }
+
+    function playAudios(audioArray) {
+        audioArray.forEach(src => {
+            try {
+                const audio = new Audio(src);
+                audio.play().catch(() => {});
+            } catch (err) {
+                console.warn("Audio playback failed:", err);
+            }
         });
     }
 
@@ -89,7 +113,8 @@ document.addEventListener("DOMContentLoaded", () => {
         inputs.forEach(i => i.addEventListener("input", updateButtonState));
 
         submitBtn.addEventListener("click", async () => {
-            const inputs = Array.from(inputRow.querySelectorAll("input.guess-input"));
+            submitBtn.disabled = true;
+
             const guesses = inputs.map(i => i.value.trim());
 
             try {
@@ -104,45 +129,46 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 const result = await res.json();
 
-                if (res.ok) {
+                if (!res.ok) {
+                    showNotification(result.error || "Guess failed");
+                    submitBtn.disabled = false;
+                    return;
+                }
 
-                    // lock inputs
-                    inputs.forEach(i => i.disabled = true);
-                    submitBtn.remove();
+                inputs.forEach(i => i.disabled = true);
+                submitBtn.remove();
 
-                    // mark matched combo visually
-                    if (result.matched) {
-                        inputs.forEach(i => i.classList.add("correct"));
-                    } else {
-                        inputs.forEach(i => i.classList.add("incorrect"));
-                    }
-
-                    attemptHistory.unshift({
-                        guesses,
-                        matched: result.matched
-                    });
-
-                    attemptsLeftEl.textContent =
-                        `Found ${result.found_count}/${result.total_combos} | Attempts ${result.attempts_used}/${result.max_attempts}`;
-
-                    if (!result.game_over) {
-                        addAttemptInputRow();
-                    } else {
-                        const msg = result.win
-                            ? "🎉 You found ALL combinations!"
-                            : "❌ Max attempts reached!";
-                        showNotification(msg, true);
-                    }
-
+                if (result.matched) {
+                    inputs.forEach(i => i.classList.add("correct"));
                 } else {
-                    showNotification(result.error || "Error checking guess");
+                    inputs.forEach(i => i.classList.add("incorrect"));
+                }
+
+                attemptHistory.unshift({
+                    guesses,
+                    matched: result.matched
+                });
+
+                attemptsLeftEl.textContent =
+                    `Found ${result.found_count}/${result.total_combos} | Attempts ${result.attempts_used}/${result.max_attempts}`;
+
+                if (!result.game_over) {
+                    addAttemptInputRow();
+                } else {
+                    showNotification(
+                        result.win
+                            ? "🎉 You found ALL combinations!"
+                            : "❌ Max attempts reached!",
+                        true
+                    );
                 }
 
             } catch (err) {
-                console.error(err);
+                console.error("Guess error:", err);
                 showNotification("Server error.");
+                submitBtn.disabled = false;
             }
-        }, {once: true});
+        }, { once: true });
     }
 
     function showNotification(message, endGame = false) {
