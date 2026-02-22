@@ -20,11 +20,13 @@ class SlotService:
             MediaService.generate_signed_path_from_symbol(s, "image", app)
             for s in symbols
         ]
+        print(f"image_urls: {image_urls}")
 
         audio_urls = [
             MediaService.generate_signed_path_from_symbol(s, "audio", app)
             for s in symbols
         ]
+        print(f"audio_urls: {audio_urls}")
 
         # Reset session
         session.clear()
