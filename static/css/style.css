@@ -46,6 +46,13 @@ input:focus { outline: 2px solid #0d6efd; outline-offset: 2px; }
 
 .slot-image {
   width: 80px;
+  display: inline-block;
+  padding: 0.5rem 0;
+  border: 2px solid #6c757d;
+  border-radius: 8px;
+  font-weight: bold;
+  background-color: #f8f9fa;
+  transition: transform 0.5s ease-in-out;
 }
 
 /* Spun symbols box */

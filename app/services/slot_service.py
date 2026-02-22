@@ -20,11 +20,13 @@ class SlotService:
             MediaService.generate_signed_path_from_symbol(s, "image", app)
             for s in symbols
         ]
+        print(f"image_urls: {image_urls}")
 
-        audios_urls = [
+        audio_urls = [
             MediaService.generate_signed_path_from_symbol(s, "audio", app)
             for s in symbols
         ]
+        print(f"audio_urls: {audio_urls}")
 
         # Reset session
         session.clear()
@@ -33,7 +35,7 @@ class SlotService:
             "combination_id": symbol_string,
             "symbols": symbols,
             "images": image_urls,
-            "audios": audios_urls,
+            "audios": audio_urls,
             "total_combos": len(combos),
             "max_attempts": app.config["MAX_ATTEMPTS"]
         }
