@@ -80,7 +80,7 @@ They are streamed through Flask via:
 ### ✅ On Vercel (Production)
 
 1.  Create Private Blob Storage
-2.  Upload files using same structure: images/A.webp audio/A.mp3
+2.  Upload files using same structure: images/A.png audio/A.mp3
 3.  Store Blob credentials in Vercel Environment Variables
 
 The backend fetches and streams media securely.
