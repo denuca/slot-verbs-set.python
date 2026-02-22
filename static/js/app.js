@@ -34,10 +34,10 @@ document.addEventListener("DOMContentLoaded", () => {
             currentCombinationId = data.combination_id;
             maxAttempts = data.max_attempts;
             imageUrls = data.images || [];
-            audioUrls = data.audios_urls || [];
+            audioUrls = data.audios || [];
 
             renderSymbols(imageUrls, true);
-            playAudios(audioUrls);
+            //playAudios(audioUrls); // might be too harsh to play the sound directly
 
             attemptsLeftEl.textContent =
                 `Found 0/${data.total_combos} | Attempts 0/${maxAttempts}`;
@@ -63,7 +63,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function renderSymbols(imagesArray, animate) {
         slotSymbolsDiv.innerHTML = "";
 
-        imagesArray.forEach(src => {
+        imagesArray.forEach((src, i) => {
             const img = document.createElement("img");
             img.src = src;
             img.className = "slot-image";
@@ -79,20 +79,61 @@ document.addEventListener("DOMContentLoaded", () => {
             img.addEventListener('drop', function (e) {
                 e.preventDefault();  // Prevent dropping the image
             });
+            // Prevent image from being dropped anywhere
+            img.addEventListener('click', function (e) {
+                playAudios(audioUrls.slice(i, i+1));
+                e.preventDefault();  // Prevent dropping the image
+            });
             if (animate) img.classList.add("spin");
             slotSymbolsDiv.appendChild(img);
         });
     }
 
     function playAudios(audioArray) {
-        audioArray.forEach(src => {
-            try {
-                const audio = new Audio(src);
-                audio.play().catch(() => {});
-            } catch (err) {
-                console.warn("Audio playback failed:", err);
+        if (!Array.isArray(audioArray) || audioArray.length === 0) {
+            console.warn("Invalid input: The audio array is empty or not an array.");
+            return;
+        }
+
+        let currentIndex = 0;
+
+        // Function to play the next audio
+        function playNextAudio() {
+            if (currentIndex < audioArray.length) {
+                const audioSrc = audioArray[currentIndex];
+
+                try {
+                    const audio = new Audio(audioSrc);
+
+                    // Check if audio is loaded successfully
+                    if (!audio.src) {
+                        console.warn(`Invalid audio source: ${audioSrc}`);
+                        currentIndex++;  // Skip this one and move to next
+                        playNextAudio();  // Try to play the next audio
+                        return;
+                    }
+
+                    audio.play().catch((err) => {
+                        console.warn(`Failed to play audio at index ${currentIndex}:`, err);
+                        currentIndex++;  // Skip this one on error
+                        playNextAudio();  // Continue with next audio
+                    });
+
+                    // When the current audio finishes, play the next one
+                    audio.onended = () => {
+                        currentIndex++;
+                        playNextAudio();  // Recursively play the next audio
+                    };
+
+                } catch (err) {
+                    console.warn(`Error creating audio for ${audioSrc}:`, err);
+                    currentIndex++;  // Skip to next audio in case of error
+                    playNextAudio();  // Continue playing the next audio
+                }
             }
-        });
+        }
+
+        playNextAudio();  // Start playing the first audio
     }
 
     function addAttemptInputRow() {

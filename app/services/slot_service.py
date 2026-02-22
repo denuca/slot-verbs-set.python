@@ -21,7 +21,7 @@ class SlotService:
             for s in symbols
         ]
 
-        audios_urls = [
+        audio_urls = [
             MediaService.generate_signed_path_from_symbol(s, "audio", app)
             for s in symbols
         ]
@@ -33,7 +33,7 @@ class SlotService:
             "combination_id": symbol_string,
             "symbols": symbols,
             "images": image_urls,
-            "audios": audios_urls,
+            "audios": audio_urls,
             "total_combos": len(combos),
             "max_attempts": app.config["MAX_ATTEMPTS"]
         }
