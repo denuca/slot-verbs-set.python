@@ -14,15 +14,15 @@ class SlotService:
             return None
 
         symbol_string = slot_key.split(":")[1]
-        symbols = StringNormalizer.normalize_list(symbol_string.split("-"))
+        symbols = symbol_string.split("-")
 
         image_urls = [
-            MediaService.generate_signed_path(f"images/{s}.png")
+            MediaService.generate_signed_path_from_symbol(s, "image", app)
             for s in symbols
         ]
 
         audios_urls = [
-            MediaService.generate_signed_path(f"audios/{s}.mp3")
+            MediaService.generate_signed_path_from_symbol(s, "audio", app)
             for s in symbols
         ]
 

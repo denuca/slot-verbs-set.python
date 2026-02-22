@@ -33,3 +33,34 @@ class SlotRepository:
         if not raw:
             return []
         return json.loads(raw)
+
+class MediaRepository:
+    INDEX_KEY = "media:index"
+
+    @staticmethod
+    def get(key: str, app=None):
+        raw = get_redis_client(app).get(key)
+        if not raw:
+            return None
+        return json.loads(raw)
+
+    @staticmethod
+    def resolve_by_public_id(public_id: str, app=None):
+        """
+        Resolves public_id to symbol.
+        Redis format:
+            media:A -> ["A", "abc_replacement"]
+        """
+        redis_client = get_redis_client(app)
+
+        for key in redis_client.smembers(MediaRepository.INDEX_KEY):
+            raw = redis_client.get(key)
+            if not raw:
+                continue
+
+            symbol, stored_public_id = json.loads(raw)
+
+            if stored_public_id == public_id:
+                return symbol
+
+        return None

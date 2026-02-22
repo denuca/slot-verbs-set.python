@@ -67,6 +67,18 @@ document.addEventListener("DOMContentLoaded", () => {
             const img = document.createElement("img");
             img.src = src;
             img.className = "slot-image";
+            // Prevent right-click on the image
+            img.oncontextmenu = function (e) {
+                e.preventDefault();
+            };
+            // Prevent dragging the image
+            img.addEventListener('dragstart', function (e) {
+                e.preventDefault();  // Prevent the default drag behavior
+            });
+            // Prevent image from being dropped anywhere
+            img.addEventListener('drop', function (e) {
+                e.preventDefault();  // Prevent dropping the image
+            });
             if (animate) img.classList.add("spin");
             slotSymbolsDiv.appendChild(img);
         });
